@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  api_service:
+    build: .
+    command: api
+    ports:
+      - "8001:8001"  
+    volumes:
+      - ./logs:/app/logs
+      - ./cache:/app/cache
+    env_file:
+      - .env
+    environment:
+      - DOCKER_ENV=true
+    restart: unless-stopped
+    network_mode: "host"
+
+  dlna_server:
+    build: .
+    command: dlna
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./logs:/app/logs
+      - ./cache:/app/cache
+    env_file:
+      - .env
+    environment:
+      - DOCKER_ENV=true
+    restart: unless-stopped
+    network_mode: "host"

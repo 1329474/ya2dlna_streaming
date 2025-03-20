@@ -1,0 +1,36 @@
+# Виртуальное окружение
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Логи
+*.log
+logs/
+
+# Кэш
+cache/
+.cache/
+
+# Системные файлы
+.DS_Store
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# IDE
+.idea/
+.vscode/
+
+# Git
+.git/
+.gitignore
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore 
+
+# TO DO folder
+todo/
