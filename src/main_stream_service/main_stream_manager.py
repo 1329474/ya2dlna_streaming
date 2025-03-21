@@ -66,6 +66,7 @@ class MainStreamManager:
         logger.info("🛑 Остановка стриминга...")
         self._stream_state_running = False
         await self._ruark_controls.stop()
+        await self._ruark_controls.set_volume(self._ruark_volume)
         await self._ruark_controls.turn_power_off()
         await self._station_controls.unmute()
         await self._stop_stream_on_stream_server()
@@ -131,7 +132,7 @@ class MainStreamManager:
                             await self._station_controls.get_current_track()
                         )
 
-                    if last_track.id != track.id:
+                    if last_track.id != track.id and track.playing:
                         track_url = (
                             await self._yandex_music_api.get_file_info(
                                 track.id
@@ -151,8 +152,11 @@ class MainStreamManager:
                     volume_set_count = 0
                     last_alice_state = current_alice_state
 
-                if (track.duration - track.progress < 1 and
-                        current_alice_state == "IDLE"):
+                if (
+                    track.duration - track.progress < 1
+                    and current_alice_state == "IDLE"
+                    and track.playing
+                ):
                     current_volume = await self._station_controls.get_volume()
                     await self._station_controls.unmute()
 
