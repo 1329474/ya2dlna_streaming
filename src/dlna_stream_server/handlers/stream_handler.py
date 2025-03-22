@@ -22,57 +22,101 @@ class StreamHandler:
         async with self._ruark_lock:
             for attempt in range(3):
                 try:
-                    logger.debug(f"🔹 Выполняем {func.__name__} с аргументами {args}, {kwargs}")
+                    logger.debug(
+                        f"Выполняем {func.__name__} с аргументами "
+                        f"{args}, {kwargs}"
+                    )
                     await func(*args, **kwargs)
                     logger.debug(f"✅ {func.__name__} выполнено успешно")
                     return
                 except Exception as e:
                     logger.warning(
-                        f"⚠️ Ошибка при {func.__name__}, попытка {attempt + 1}: {e}")
+                        f"⚠️ Ошибка при {func.__name__}, "
+                        f"попытка {attempt + 1}: {e}"
+                    )
                     await asyncio.sleep(1)
 
     async def stop_ffmpeg(self):
         """Останавливает текущий процесс FFmpeg, если он запущен."""
         if self._ffmpeg_process:
             logger.info("⏹ Останавливаем текущий поток FFmpeg...")
-            try:
-                self._ffmpeg_process.terminate()  # Попробуем мягкое завершение
-                await self._ffmpeg_process.wait()
-            except ProcessLookupError:
-                logger.warning("⚠️ FFmpeg уже завершился")
-            except asyncio.TimeoutError:
-                logger.warning(
-                    "⚠️ FFmpeg не завершился, принудительное завершение."
-                )
-                self._ffmpeg_process.kill()
 
-            self._ffmpeg_process = None  # Очистка переменной
+            try:
+                self._ffmpeg_process.terminate()
+                logger.debug("📤 SIGTERM отправлен FFmpeg")
+
+                try:
+                    await asyncio.wait_for(
+                        self._ffmpeg_process.wait(),
+                        timeout=5
+                    )
+                    logger.info(
+                        f"✅ FFmpeg завершился, код: "
+                        f"{self._ffmpeg_process.returncode}, "
+                        f"PID: {self._ffmpeg_process.pid}"
+                    )
+                except asyncio.TimeoutError:
+                    logger.warning(
+                        "⚠️ FFmpeg не завершился вовремя, "
+                        "принудительное завершение."
+                    )
+                    self._ffmpeg_process.kill()
+                    logger.debug("💀 Отправили kill()")
+
+                    try:
+                        await asyncio.wait_for(
+                            self._ffmpeg_process.wait(),
+                            timeout=5
+                        )
+                        logger.info(
+                            f"✅ FFmpeg принудительно завершён, код: "
+                            f"{self._ffmpeg_process.returncode}"
+                        )
+                    except asyncio.TimeoutError:
+                        logger.error(
+                            "❌ FFmpeg не завершился даже после kill() — "
+                            "залипший процесс!"
+                        )
+
+            except ProcessLookupError:
+                logger.warning("⚠️ FFmpeg уже завершился (ProcessLookupError)")
+            except Exception as e:
+                logger.exception(f"❌ Ошибка при остановке FFmpeg: {e}")
+            finally:
+                self._ffmpeg_process = None
 
     async def start_ffmpeg_stream(self, yandex_url: str):
         """Запускает потоковую передачу через FFmpeg."""
-        await self.stop_ffmpeg()  # Останавливаем старый процесс перед запуском нового
+        await self.stop_ffmpeg()  # Останавливаем старый процесс
 
         logger.info(f"🎥 Запуск потоковой передачи с {yandex_url}")
 
         self._ffmpeg_process = await asyncio.create_subprocess_exec(
-            "ffmpeg", "-re",  # 🔥 Читаем файл с реальной скоростью
-            "-i", yandex_url,  # 🔗 Прямая передача ссылки
+            "ffmpeg", "-re",  # Читаем файл с реальной скоростью
+            "-i", yandex_url,  # Прямая передача ссылки
             "-acodec", "libmp3lame", "-b:a", "320k", "-f", "mp3", "pipe:1",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE
         )
+        logger.info(f"🎥 Запущен процесс FFmpeg с PID: {self._ffmpeg_process.pid}")
 
     async def stream_audio(self):
-        """Отправляет потоковые данные в ответ на HTTP-запрос."""
         if not self._ffmpeg_process:
             raise HTTPException(status_code=404, detail="Поток не запущен")
 
         async def generate():
-            while True:
-                chunk = await self._ffmpeg_process.stdout.read(4096)
-                if not chunk:
-                    break
-                yield chunk
+            try:
+                while True:
+                    chunk = await self._ffmpeg_process.stdout.read(4096)
+                    if not chunk:
+                        break
+                    yield chunk
+            except asyncio.CancelledError:
+                logger.info("🔌 Клиент отключился от стрима")
+                await self.stop_ffmpeg()
+                raise
+            except Exception as e:
+                logger.warning(f"⚠️ Ошибка в генераторе потока: {e}")
 
         return StreamingResponse(generate(), media_type="audio/mpeg")
 
