@@ -125,6 +125,8 @@ class MainStreamManager:
                         if current_volume == 0:
                             await self._station_controls.unmute()
                 if current_alice_state == "IDLE":
+                    if not track.playing:
+                        await self._ruark_controls.stop()
                     if speak_count > 0:
                         await self._station_controls.mute()
                     if track.id == last_track.id:
