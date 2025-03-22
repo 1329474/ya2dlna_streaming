@@ -66,10 +66,10 @@ class MainStreamManager:
         logger.info("🛑 Остановка стриминга...")
         self._stream_state_running = False
         await self._ruark_controls.stop()
+        await self._stop_stream_on_stream_server()
         await self._ruark_controls.set_volume(self._ruark_volume)
         await self._ruark_controls.turn_power_off()
         await self._station_controls.unmute()
-        await self._stop_stream_on_stream_server()
         # Остановка WebSocket-клиента
         await self._station_controls.stop_ws_client()
 

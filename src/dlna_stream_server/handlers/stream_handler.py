@@ -43,7 +43,7 @@ class StreamHandler:
 
             try:
                 self._ffmpeg_process.terminate()
-                logger.debug("📤 SIGTERM отправлен FFmpeg")
+                logger.info("📤 SIGTERM отправлен FFmpeg")
 
                 try:
                     await asyncio.wait_for(
