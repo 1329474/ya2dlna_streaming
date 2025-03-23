@@ -35,7 +35,7 @@ class YandexMusicAPI:
 
         # Выбираем нужное качество, если указано
         if quality:
-            quality = int(quality)  # преобразуем строку в число
+            quality = int(quality)
             logger.info(f"🔍 Ищем ссылку на {quality} качество")
             for info in download_info:
                 logger.info(
