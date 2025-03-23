@@ -96,23 +96,34 @@ class MainStreamManager:
             last_alice_state = await self._station_controls.get_alice_state()
 
             # Инициализация трека и счётчиков
-            last_track = Track(id="0", artist="", title="", duration=0, progress=0, playing=False)
+            last_track = Track(
+                id="0",
+                artist="",
+                title="",
+                duration=0,
+                progress=0,
+                playing=False
+            )
             volume_set_count = 0
             speak_count = 0
 
             while self._stream_state_running:
                 track = await self._station_controls.get_current_track()
-                current_alice_state = await self._station_controls.get_alice_state()
+                current_alice_state = (
+                    await self._station_controls.get_alice_state()
+                )
 
-                # ⏱️ Обработка смены состояния Алисы
+                # Обработка смены состояния Алисы
                 if current_alice_state != last_alice_state:
                     current_volume = await self._station_controls.get_volume()
 
-                    if current_alice_state in ALICE_ACTIVE_STATES and volume_set_count < 1:
+                    if (current_alice_state in ALICE_ACTIVE_STATES and
+                            volume_set_count < 1):
                         volume_set_count += 1
                         speak_count += 1
 
-                        self._ruark_volume = await self._ruark_controls.get_volume()
+                        self._ruark_volume = await self._ruark_controls.\
+                            get_volume()
                         await self._ruark_controls.set_volume(2)
 
                         if current_volume == 0:
@@ -129,16 +140,21 @@ class MainStreamManager:
                     # Обновим трек, если он не сменился,
                     # чтобы избежать зацикливания
                     if track.id == last_track.id:
-                        track = await self._station_controls.get_current_track()
+                        track = await self._station_controls.\
+                            get_current_track()
 
                     # Если новый трек играет — запускаем стрим
                     if track.id != last_track.id and track.playing:
-                        track_url = await self._yandex_music_api.get_file_info(track.id)
+                        track_url = await self._yandex_music_api.get_file_info(
+                            track.id
+                        )
                         await self._send_track_to_stream_server(track_url)
                         last_track = track
 
                     if speak_count > 0:
-                        await self._ruark_controls.set_volume(self._ruark_volume)
+                        await self._ruark_controls.set_volume(
+                            self._ruark_volume
+                        )
                         speak_count = 0
 
                     if await self._station_controls.get_volume() > 0:
