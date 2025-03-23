@@ -122,8 +122,9 @@ class MainStreamManager:
                         volume_set_count += 1
                         speak_count += 1
 
-                        self._ruark_volume = await self._ruark_controls.\
-                            get_volume()
+                        self._ruark_volume = (
+                            await self._ruark_controls.get_volume()
+                        )
                         await self._ruark_controls.set_volume(2)
 
                         if current_volume == 0:
@@ -140,8 +141,9 @@ class MainStreamManager:
                     # Обновим трек, если он не сменился,
                     # чтобы избежать зацикливания
                     if track.id == last_track.id:
-                        track = await self._station_controls.\
-                            get_current_track()
+                        track = (
+                            await self._station_controls.get_current_track()
+                        )
 
                     # Если новый трек играет — запускаем стрим
                     if track.id != last_track.id and track.playing:
