@@ -9,6 +9,8 @@ services:
     volumes:
       - ./logs:/app/logs
       - ./cache:/app/cache
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
     env_file:
       - .env
     environment:
@@ -24,6 +26,8 @@ services:
     volumes:
       - ./logs:/app/logs
       - ./cache:/app/cache
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
     env_file:
       - .env
     environment:
