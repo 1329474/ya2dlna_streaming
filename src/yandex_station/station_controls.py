@@ -21,6 +21,7 @@ class YandexStationControls:
     def __init__(self, ws_client: YandexStationClient):
         self._ws_client = ws_client
         self._volume = 0
+        self._was_muted = False
         self._ws_task = None
 
     async def start_ws_client(self):
@@ -149,20 +150,27 @@ class YandexStationControls:
                     "volume": volume,
                 }
             )
+            if volume > 0:
+                self._was_muted = False
         except Exception as e:
             logger.error(f"❌ Ошибка при установке громкости: {e}")
 
     async def mute(self):
         """Безопасное выключение звука — только если Алиса молчит"""
+        if self._was_muted:
+            return
         state = await self.get_alice_state()
         if state not in ALICE_ACTIVE_STATES:
             await self._ws_client.send_command({"command": "setVolume", "volume": 0})
+            self._was_muted = True
             logger.info("🔇 Станция замьючена безопасно")
         else:
             logger.info(f"🚫 Пропускаем mute — Алиса уже говорит ({state})")
 
     async def unmute(self):
         """Включение громкости"""
+        if not self._was_muted:
+            return
         logger.info("🔊 Включение громкости")
         try:
             await self._ws_client.send_command(
@@ -171,5 +179,6 @@ class YandexStationControls:
                     "volume": self._volume,
                 }
             )
+            self._was_muted = False
         except Exception as e:
             logger.error(f"❌ Ошибка при включении громкости: {e}")
