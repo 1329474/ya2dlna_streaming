@@ -81,94 +81,88 @@ class MainStreamManager:
         self._tasks.clear()
         logger.info("✅ Стриминг остановлен")
 
-    async def streaming(self):
-        """Основной поток управления стримингом"""
+    async def stream(self):
+        """Основной цикл управления стримингом"""
         try:
             await asyncio.sleep(1)
             await self._station_controls.set_default_volume()
             await self._ruark_controls.get_session_id()
-            status = await self._ruark_controls.get_power_status()
-            if status == "0":
+
+            # Включаем Ruark при необходимости
+            if await self._ruark_controls.get_power_status() == "0":
                 await self._ruark_controls.turn_power_on()
+
             self._ruark_volume = await self._ruark_controls.get_volume()
             last_alice_state = await self._station_controls.get_alice_state()
-            last_track = Track(
-                id="0",
-                artist="",
-                title="",
-                duration=0,
-                progress=0,
-                playing=False
-            )
+
+            # Инициализация трека и счётчиков
+            last_track = Track(id="0", artist="", title="", duration=0, progress=0, playing=False)
             volume_set_count = 0
-            current_volume = 0
             speak_count = 0
 
             while self._stream_state_running:
                 track = await self._station_controls.get_current_track()
-                current_alice_state = (
-                    await self._station_controls.get_alice_state()
-                )
+                current_alice_state = await self._station_controls.get_alice_state()
 
+                # ⏱️ Обработка смены состояния Алисы
                 if current_alice_state != last_alice_state:
                     current_volume = await self._station_controls.get_volume()
-                    if (current_alice_state in ALICE_ACTIVE_STATES and
-                            volume_set_count < 1):
 
+                    if current_alice_state in ALICE_ACTIVE_STATES and volume_set_count < 1:
                         volume_set_count += 1
                         speak_count += 1
 
-                        self._ruark_volume = (
-                            await self._ruark_controls.get_volume()
-                        )
+                        self._ruark_volume = await self._ruark_controls.get_volume()
                         await self._ruark_controls.set_volume(2)
+
                         if current_volume == 0:
                             await self._station_controls.unmute()
+
+                # 😴 Если Алиса в режиме ожидания
                 if current_alice_state == "IDLE":
                     if not track.playing:
                         await self._ruark_controls.stop()
+
                     if speak_count > 0:
                         await self._station_controls.mute()
-                    if track.id == last_track.id:
-                        track = (
-                            await self._station_controls.get_current_track()
-                        )
 
-                    if last_track.id != track.id and track.playing:
-                        track_url = (
-                            await self._yandex_music_api.get_file_info(
-                                track.id
-                            )
-                        )
+                    # Обновим трек, если он не сменился, чтобы избежать зацикливания
+                    if track.id == last_track.id:
+                        track = await self._station_controls.get_current_track()
+
+                    # Если новый трек играет — запускаем стрим
+                    if track.id != last_track.id and track.playing:
+                        track_url = await self._yandex_music_api.get_file_info(track.id)
                         await self._send_track_to_stream_server(track_url)
                         last_track = track
-                    current_volume = await self._station_controls.get_volume()
+
                     if speak_count > 0:
-                        await self._ruark_controls.set_volume(
-                            self._ruark_volume
-                        )
-
+                        await self._ruark_controls.set_volume(self._ruark_volume)
                         speak_count = 0
-                    if current_volume > 0:
-                        await self._station_controls.mute()
-                    volume_set_count = 0
-                    last_alice_state = current_alice_state
 
+                    if await self._station_controls.get_volume() > 0:
+                        await self._station_controls.mute()
+
+                    volume_set_count = 0
+
+                # ⏳ Если трек почти закончился — размутим станцию
                 if (
                     track.duration - track.progress < 1
                     and current_alice_state == "IDLE"
                     and track.playing
                 ):
-                    current_volume = await self._station_controls.get_volume()
                     await self._station_controls.unmute()
 
+                # 📋 Логгирование текущего состояния
                 logger.info(
-                    f"🎵 Сейчас играет: {track.id} - {track.artist} - "
-                    f"{track.title} - {track.progress}/{track.duration}, "
+                    f"🎵 Сейчас играет: {track.id} - {track.artist} - {track.title} - "
+                    f"{track.progress}/{track.duration}, "
                     f"статус Алисы: {current_alice_state}, "
                     f"предыдущий статус Алисы: {last_alice_state}, "
                     f"проигрывание: {track.playing}"
                 )
+
+                last_alice_state = current_alice_state
                 await asyncio.sleep(0.3)
 
         except asyncio.CancelledError:
