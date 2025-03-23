@@ -3,6 +3,7 @@ from logging import getLogger
 
 from injector import inject
 
+from yandex_station.constants import ALICE_ACTIVE_STATES
 from yandex_station.models import Track
 from yandex_station.station_ws_control import YandexStationClient
 
@@ -152,15 +153,13 @@ class YandexStationControls:
             logger.error(f"❌ Ошибка при установке громкости: {e}")
 
     async def mute(self):
-        """Установка режима громкости"""
-        logger.info("🔊 Установка режима громкости на mute")
-        try:
-            self._volume = await self.get_volume()
-            await self._ws_client.send_command(
-                {"command": "setVolume", "volume": 0}
-            )
-        except Exception as e:
-            logger.error(f"❌ Ошибка при установке режима громкости: {e}")
+        """Безопасное выключение звука — только если Алиса молчит"""
+        state = await self.get_alice_state()
+        if state not in ALICE_ACTIVE_STATES:
+            await self._ws_client.send_command({"command": "setVolume", "volume": 0})
+            logger.info("🔇 Станция замьючена безопасно")
+        else:
+            logger.info(f"🚫 Пропускаем mute — Алиса уже говорит ({state})")
 
     async def unmute(self):
         """Включение громкости"""
