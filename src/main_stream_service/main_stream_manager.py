@@ -81,7 +81,7 @@ class MainStreamManager:
         self._tasks.clear()
         logger.info("✅ Стриминг остановлен")
 
-    async def stream(self):
+    async def streaming(self):
         """Основной цикл управления стримингом"""
         try:
             await asyncio.sleep(1)
@@ -118,7 +118,7 @@ class MainStreamManager:
                         if current_volume == 0:
                             await self._station_controls.unmute()
 
-                # 😴 Если Алиса в режиме ожидания
+                #  Если Алиса в режиме ожидания
                 if current_alice_state == "IDLE":
                     if not track.playing:
                         await self._ruark_controls.stop()
@@ -126,7 +126,8 @@ class MainStreamManager:
                     if speak_count > 0:
                         await self._station_controls.mute()
 
-                    # Обновим трек, если он не сменился, чтобы избежать зацикливания
+                    # Обновим трек, если он не сменился,
+                    # чтобы избежать зацикливания
                     if track.id == last_track.id:
                         track = await self._station_controls.get_current_track()
 
@@ -145,7 +146,7 @@ class MainStreamManager:
 
                     volume_set_count = 0
 
-                # ⏳ Если трек почти закончился — размутим станцию
+                # Если трек почти закончился — размутим станцию
                 if (
                     track.duration - track.progress < 1
                     and current_alice_state == "IDLE"
@@ -153,9 +154,9 @@ class MainStreamManager:
                 ):
                     await self._station_controls.unmute()
 
-                # 📋 Логгирование текущего состояния
                 logger.info(
-                    f"🎵 Сейчас играет: {track.id} - {track.artist} - {track.title} - "
+                    f"🎵 Сейчас играет: {track.id} - "
+                    f"{track.artist} - {track.title} - "
                     f"{track.progress}/{track.duration}, "
                     f"статус Алисы: {current_alice_state}, "
                     f"предыдущий статус Алисы: {last_alice_state}, "
