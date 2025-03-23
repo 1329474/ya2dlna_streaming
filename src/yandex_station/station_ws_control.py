@@ -36,6 +36,7 @@ class YandexStationClient:
         self.authenticated = False
         self.device_token = None
         self.running = True
+        self.reconnect_required = False
         self.tasks = []  # Хранение фоновых задач
 
         self.device_finder.find_devices()  # Поиск устройств Yandex в сети
@@ -124,20 +125,29 @@ class YandexStationClient:
             except aiohttp.ClientError as e:
                 logger.error(f"❌ WebSocket ошибка: {e}")
             finally:
-                if not self.running:
+                if not self.running and not self.reconnect_required:
                     logger.info(
-                        "🛑 WebSocket-клиент завершает работу, "
+                        "🛑 WebSocket-клиент завершает работу "
                         "переподключение не требуется"
                     )
                     break
-
-                logger.info("🔄 Переподключение через 5 секунд...")
-                await asyncio.sleep(5)
+                else:
+                    logger.info("🔄 Переподключение через 5 секунд...")
+                    await asyncio.sleep(5)
+                    await self.connect()
+                    self.reconnect_required = False
 
     async def keep_alive_ws_connection(self):
         """Поддерживает соединение с WebSocket."""
         while self.running:
-            await self.send_command({"command": "ping"})
+            try:
+                response = await self.send_command({"command": "ping"})
+                if response.get("error") == "Timeout":
+                    logger.warning("❌ Ping timeout. Инициируем переподключение.")
+                    self.running = False
+                    self.reconnect_required = True
+            except Exception as e:
+                logger.error(f"❌ Ошибка при отправке пинга: {e}")
             await asyncio.sleep(10)
 
     async def authenticate(self) -> bool:
