@@ -49,6 +49,7 @@ class YandexStationClient:
 
     async def connect(self):
         """Подключение к WebSocket станции."""
+        self.reconnect_required = False
         ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
         ssl_context.check_hostname = False
         ssl_context.verify_mode = ssl.CERT_NONE
@@ -135,7 +136,6 @@ class YandexStationClient:
                     logger.info("🔄 Переподключение через 5 секунд...")
                     await asyncio.sleep(5)
                     await self.connect()
-                    self.reconnect_required = False
 
     async def keep_alive_ws_connection(self):
         """Поддерживает соединение с WebSocket."""
@@ -143,9 +143,11 @@ class YandexStationClient:
             try:
                 response = await self.send_command({"command": "ping"})
                 if response.get("error") == "Timeout":
-                    logger.warning("❌ Ping timeout. Инициируем переподключение.")
-                    self.running = False
+                    logger.warning(
+                        "❌ Ping timeout. Инициируем переподключение."
+                    )
                     self.reconnect_required = True
+                    self.running = False
             except Exception as e:
                 logger.error(f"❌ Ошибка при отправке пинга: {e}")
             await asyncio.sleep(10)
