@@ -128,7 +128,7 @@ class MainStreamManager:
                     if not track.playing:
                         await self._ruark_controls.stop()
 
-                    if speak_count > 0:
+                    if speak_count > 0 and track.playing:
                         await self._station_controls.mute()
 
                     if track.id == last_track.id:
