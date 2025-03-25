@@ -82,13 +82,8 @@ class MainStreamManager:
     async def streaming(self):
         """Основной поток управления стримингом"""
         try:
-            await asyncio.sleep(1)
-            await self._station_controls.set_default_volume()
-            await self._ruark_controls.get_session_id()
-            if await self._ruark_controls.get_power_status() == "0":
-                await self._ruark_controls.turn_power_on()
+            await self._prepare_devices()
 
-            self._ruark_volume = await self._ruark_controls.get_volume()
             last_alice_state = await self._station_controls.get_alice_state()
             last_track = Track(
                 id="0",
@@ -108,59 +103,19 @@ class MainStreamManager:
                 )
 
                 if current_alice_state != last_alice_state:
-                    current_volume = await self._station_controls.get_volume()
-                    if (
-                        current_alice_state in ALICE_ACTIVE_STATES
-                        and volume_set_count < 1
-                    ):
-                        volume_set_count += 1
-                        speak_count += 1
-
-                        self._ruark_volume = (
-                            await self._ruark_controls.get_volume()
+                    speak_count, volume_set_count = (
+                        await self._handle_alice_state_change(
+                            current_alice_state, volume_set_count, speak_count
                         )
-                        await self._ruark_controls.fade_out_ruark(
-                            start_volume=self._ruark_volume
-                        )
-
-                        if current_volume == 0:
-                            await self._station_controls.unmute()
+                    )
 
                 if current_alice_state == "IDLE":
-                    if not track.playing:
-                        await self._ruark_controls.stop()
-
-                    if track.id == last_track.id:
-                        track = (
-                            await self._station_controls.get_current_track()
-                        )
-
-                    if last_track.id != track.id and track.playing:
-                        track_url = (
-                            await self._yandex_music_api.get_file_info(
-                                track.id
-                            )
-                        )
-                        await self._send_track_to_stream_server(track_url)
-                        last_track = track
-
-                    if speak_count > 0 and track.playing:
-                        logger.info("🔁 Возвращаем громкость Ruark")
-                        await self._ruark_controls.set_volume(
-                            self._ruark_volume
-                        )
-                        await self._station_controls.fade_out_station()
-                        speak_count = 0
-
-                    current_volume = await self._station_controls.get_volume()
-
-                    if (
-                        current_volume > 0
-                        and track.duration - track.progress > 10
-                        and track.playing
-                    ):
-                        await self._station_controls.fade_out_station()
-
+                    await self._handle_idle_state(
+                        track,
+                        last_track,
+                        speak_count
+                    )
+                    speak_count = 0
                     volume_set_count = 0
 
                 if (
@@ -178,6 +133,7 @@ class MainStreamManager:
                     f"проигрывание: {track.playing}"
                 )
 
+                last_track = track
                 last_alice_state = current_alice_state
                 await asyncio.sleep(1.0)
 
@@ -185,6 +141,56 @@ class MainStreamManager:
             logger.info("🛑 Стриминг завершён по команде остановки")
         except Exception as e:
             logger.error(f"❌ Ошибка в стриминге: {e}")
+
+    async def _prepare_devices(self):
+        await asyncio.sleep(1)
+        await self._station_controls.set_default_volume()
+        await self._ruark_controls.get_session_id()
+        if await self._ruark_controls.get_power_status() == "0":
+            await self._ruark_controls.turn_power_on()
+        self._ruark_volume = await self._ruark_controls.get_volume()
+
+    async def _handle_alice_state_change(
+            self,
+            current_alice_state,
+            volume_set_count,
+            speak_count
+    ):
+        current_volume = await self._station_controls.get_volume()
+        if current_alice_state in ALICE_ACTIVE_STATES and volume_set_count < 1:
+            volume_set_count += 1
+            speak_count += 1
+            self._ruark_volume = await self._ruark_controls.get_volume()
+            await self._ruark_controls.fade_out_ruark(
+                start_volume=self._ruark_volume
+            )
+            if current_volume == 0:
+                await self._station_controls.unmute()
+        return speak_count, volume_set_count
+
+    async def _handle_idle_state(self, track, last_track, speak_count):
+        if not track.playing:
+            await self._ruark_controls.stop()
+
+        if track.id == last_track.id:
+            track = await self._station_controls.get_current_track()
+
+        if last_track.id != track.id and track.playing:
+            track_url = await self._yandex_music_api.get_file_info(track.id)
+            await self._send_track_to_stream_server(track_url)
+
+        if speak_count > 0 and track.playing:
+            logger.info("🔁 Возвращаем громкость Ruark")
+            await self._ruark_controls.set_volume(self._ruark_volume)
+            await self._station_controls.fade_out_station()
+
+        current_volume = await self._station_controls.get_volume()
+        if (
+            current_volume > 0
+            and track.duration - track.progress > 10
+            and track.playing
+        ):
+            await self._station_controls.fade_out_station()
 
     async def _send_track_to_stream_server(self, track_url: str):
         """Отправляет ссылку на трек на стрим сервер"""
