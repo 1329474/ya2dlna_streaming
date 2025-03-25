@@ -156,6 +156,7 @@ class MainStreamManager:
                     if (
                         current_volume > 0
                         and track.duration - track.progress > 10
+                        and track.playing
                     ):
                         await self._station_controls.mute()
 
