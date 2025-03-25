@@ -140,8 +140,10 @@ class RuarkR5Controller:
 
     async def stop(self) -> None:
         """Остановка воспроизведения"""
-        await asyncio.to_thread(self.av_transport.Stop, InstanceID=0)
-        logger.info("⏹ Воспроизведение остановлено")
+        playing = await self.is_playing()
+        if playing:
+            await asyncio.to_thread(self.av_transport.Stop, InstanceID=0)
+            logger.info("⏹ Воспроизведение остановлено")
 
     async def next_track(self) -> None:
         """Переключение на следующий трек"""
