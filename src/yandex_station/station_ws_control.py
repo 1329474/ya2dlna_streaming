@@ -149,6 +149,7 @@ class YandexStationClient:
                     )
                     self.reconnect_required = True
                     self.running = False
+                    self._cancel_tasks()
             except Exception as e:
                 logger.error(f"❌ Ошибка при отправке пинга: {e}")
             await asyncio.sleep(10)

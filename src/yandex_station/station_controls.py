@@ -161,6 +161,7 @@ class YandexStationControls:
             return
         state = await self.get_alice_state()
         if state not in ALICE_ACTIVE_STATES:
+            self._volume = await self.get_volume()
             await self._ws_client.send_command({"command": "setVolume", "volume": 0})
             self._was_muted = True
             logger.info("🔇 Станция замьючена безопасно")
