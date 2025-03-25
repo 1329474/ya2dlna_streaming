@@ -1,4 +1,5 @@
 import asyncio
+import time
 from logging import getLogger
 
 from injector import inject
@@ -18,10 +19,16 @@ class YandexStationControls:
     _ws_task: asyncio.Task | None
 
     @inject
-    def __init__(self, ws_client: YandexStationClient):
+    def __init__(
+        self,
+        ws_client: YandexStationClient,
+        grace_delay: float = 1.5,
+    ):
         self._ws_client = ws_client
         self._volume = 0
         self._was_muted = False
+        self._last_mute_time = 0
+        self._grace_delay = grace_delay
         self._ws_task = None
 
     async def start_ws_client(self):
@@ -162,14 +169,24 @@ class YandexStationControls:
         state = await self.get_alice_state()
         if state not in ALICE_ACTIVE_STATES:
             self._volume = await self.get_volume()
-            await self._ws_client.send_command({"command": "setVolume", "volume": 0})
+            await self._ws_client.send_command(
+                {"command": "setVolume", "volume": 0}
+            )
             self._was_muted = True
+            self._last_mute_time = time.monotonic()
             logger.info("🔇 Станция замьючена безопасно")
         else:
             logger.info(f"🚫 Пропускаем mute — Алиса уже говорит ({state})")
 
     async def unmute(self):
         """Включение громкости"""
+        elapsed = time.monotonic() - self._last_mute_time
+        if elapsed < self._grace_delay:
+            logger.info(
+                f"⏳ Пропускаем unmute — прошло только {elapsed:.2f}s "
+                f"(нужно ≥ {self._grace_delay:.2f}s)"
+            )
+            return
         if not self._was_muted:
             return
         logger.info("🔊 Включение громкости")
