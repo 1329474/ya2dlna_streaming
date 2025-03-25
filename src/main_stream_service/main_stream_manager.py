@@ -152,7 +152,11 @@ class MainStreamManager:
                         speak_count = 0
 
                     current_volume = await self._station_controls.get_volume()
-                    if current_volume > 0:
+
+                    if (
+                        current_volume > 0
+                        and track.duration - track.progress > 10
+                    ):
                         await self._station_controls.mute()
 
                     volume_set_count = 0
