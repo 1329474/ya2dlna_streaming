@@ -98,7 +98,9 @@ class StreamHandler:
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE
         )
-        logger.info(f"🎥 Запущен процесс FFmpeg с PID: {self._ffmpeg_process.pid}")
+        logger.info(
+            f"🎥 Запущен процесс FFmpeg с PID: {self._ffmpeg_process.pid}"
+        )
 
     async def stream_audio(self):
         if not self._ffmpeg_process:

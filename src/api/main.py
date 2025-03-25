@@ -1,4 +1,4 @@
-from core.logging.setup import setup_logging
+from core.logging.setup import setup_logging  # noqa: F401
 from logging import getLogger
 
 import uvicorn

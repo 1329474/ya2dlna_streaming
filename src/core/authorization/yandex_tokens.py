@@ -19,9 +19,12 @@ async def get_device_token(device_id: str, platform: str) -> str:
     async with aiohttp.ClientSession() as session:
 
         try:
-            async with session.get(url, headers=headers, params=params) as response:
+            async with session.get(
+                url, headers=headers, params=params
+            ) as response:
                 response_data = await response.json()
-                if response_data.get("status") == "ok" and "token" in response_data:
+                if (response_data.get("status") == "ok" and
+                        "token" in response_data):
                     token = response_data["token"]
                     logger.info("✅ Токен успешно получен")
                     return token

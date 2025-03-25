@@ -7,7 +7,7 @@ from injector import inject
 from core.config.settings import settings
 from main_stream_service.yandex_music_api import YandexMusicAPI
 from ruark_audio_system.ruark_r5_controller import RuarkR5Controller
-from yandex_station.constants import ALICE_ACTIVE_STATES, FADE_TIME
+from yandex_station.constants import ALICE_ACTIVE_STATES
 from yandex_station.models import Track
 from yandex_station.station_controls import YandexStationControls
 from yandex_station.station_ws_control import YandexStationClient

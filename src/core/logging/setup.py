@@ -14,10 +14,15 @@ def setup_logging():
         "disable_existing_loggers": True,
         "formatters": {
             "default": {
-                "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+                "format": (
+                    "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+                )
             },
             "detailed": {
-                "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s\n%(exc_info)s"
+                "format": (
+                    "%(asctime)s - %(name)s - %(levelname)s - "
+                    "%(message)s\n%(exc_info)s"
+                )
             }
         },
         "handlers": {
@@ -28,7 +33,7 @@ def setup_logging():
             },
             "file": {
                 "class": "logging.handlers.RotatingFileHandler",
-                "filename": os.path.join(LOG_DIR, "app.log"),  # Путь к файлу логов
+                "filename": os.path.join(LOG_DIR, "app.log"),
                 "formatter": "detailed",
                 "level": "INFO",
                 "maxBytes": 5 * 1024 * 1024,

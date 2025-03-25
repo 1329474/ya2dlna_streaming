@@ -65,14 +65,20 @@ class RuarkR5Controller:
             logger.info(f"Устройства: {devices}")
             for device in devices:
                 try:
-                    logger.info(f"Проверяем устройство: {device.friendly_name}")
+                    logger.info(
+                        f"Проверяем устройство: {device.friendly_name}"
+                    )
                     if device_name in device.friendly_name:
                         logger.info(
-                            f"Найдено подходящее устройство: {device.friendly_name}"
+                            "Найдено подходящее устройство: "
+                            f"{device.friendly_name}"
                         )
                         return device
                 except Exception as e:
-                    logger.error(f"Ошибка при обработке устройства {device}: {str(e)}")
+                    logger.error(
+                        "Ошибка при обработке устройства "
+                        f"{device}: {str(e)}"
+                    )
                     continue
             logger.info(f"Не найдено устройств с именем: {device_name}")
             return None

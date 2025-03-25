@@ -124,7 +124,8 @@ class YandexStationControls:
             state = await self._ws_client.get_latest_message()
             if state:
                 logger.info(
-                    f"🔊 Получение текущего уровня громкости Алиcы: {state.get('state', {}).get('volume', {})}"
+                    f"🔊 Получение текущего уровня громкости Алиcы: "
+                    f"{state.get('state', {}).get('volume', {})}"
                 )
                 return state.get("state", {}).get("volume", {})
         except Exception as e:
