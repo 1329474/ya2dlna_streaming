@@ -1,10 +1,9 @@
 import asyncio
-import time
 from logging import getLogger
 
 from injector import inject
 
-from yandex_station.constants import ALICE_ACTIVE_STATES
+from yandex_station.constants import ALICE_ACTIVE_STATES, FADE_TIME
 from yandex_station.models import Track
 from yandex_station.station_ws_control import YandexStationClient
 
@@ -185,3 +184,10 @@ class YandexStationControls:
             self._was_muted = False
         except Exception as e:
             logger.error(f"❌ Ошибка при включении громкости: {e}")
+
+    async def fade_out_station(self):
+        """Плавное отключение звука станции с задержкой"""
+        logger.info(f"🎧 Ждём {FADE_TIME}s перед mute станции")
+        await asyncio.sleep(FADE_TIME)
+        await self.mute()
+        logger.info("🔇 Станция замьючена плавно")

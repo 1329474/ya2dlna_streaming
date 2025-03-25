@@ -245,6 +245,14 @@ class RuarkR5Controller:
         )
         logger.info("🔇 Звук отключен" if mute else "🔊 Звук включен")
 
+    async def fade_out_ruark(self, volume: int):
+        """Плавное уменьшение громкости"""
+        if volume % 2 != 0:
+            volume -= 1
+        for v in range(volume, 2, -4):
+            await self.set_volume(v)
+            await asyncio.sleep(0.1)
+
     async def list_presets(self) -> str:
         """Получение списка пресетов"""
         result = await asyncio.to_thread(

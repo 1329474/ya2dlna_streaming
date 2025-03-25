@@ -79,13 +79,6 @@ class MainStreamManager:
         self._tasks.clear()
         logger.info("✅ Стриминг остановлен")
 
-    async def fade_out_station(self, delay: float = FADE_TIME):
-        """Плавное отключение звука станции с задержкой"""
-        logger.info(f"🎧 Ждём {delay}s перед mute станции")
-        await asyncio.sleep(delay)
-        await self._station_controls.mute()
-        logger.info("🔇 Станция замьючена плавно")
-
     async def streaming(self):
         """Основной поток управления стримингом"""
         try:
@@ -126,7 +119,9 @@ class MainStreamManager:
                         self._ruark_volume = (
                             await self._ruark_controls.get_volume()
                         )
-                        await self._ruark_controls.set_volume(2)
+                        await self._ruark_controls.fade_out_ruark(
+                            self._ruark_volume
+                        )
 
                         if current_volume == 0:
                             await self._station_controls.unmute()
@@ -154,7 +149,7 @@ class MainStreamManager:
                         await self._ruark_controls.set_volume(
                             self._ruark_volume
                         )
-                        await self.fade_out_station(FADE_TIME)
+                        await self._station_controls.fade_out_station()
                         speak_count = 0
 
                     current_volume = await self._station_controls.get_volume()
@@ -164,7 +159,7 @@ class MainStreamManager:
                         and track.duration - track.progress > 10
                         and track.playing
                     ):
-                        await self.fade_out_station(FADE_TIME)
+                        await self._station_controls.fade_out_station()
 
                     volume_set_count = 0
 
