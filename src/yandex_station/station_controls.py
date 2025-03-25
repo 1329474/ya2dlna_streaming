@@ -179,16 +179,24 @@ class YandexStationControls:
             logger.info(f"🚫 Пропускаем mute — Алиса уже говорит ({state})")
 
     async def unmute(self):
-        """Включение громкости"""
-        elapsed = time.monotonic() - self._last_mute_time
-        if elapsed < self._grace_delay:
-            logger.info(
-                f"⏳ Пропускаем unmute — прошло только {elapsed:.2f}s "
-                f"(нужно ≥ {self._grace_delay:.2f}s)"
-            )
-            return
         if not self._was_muted:
             return
+
+        state = await self.get_alice_state()
+        if state in ALICE_ACTIVE_STATES:
+            logger.info(
+                f"🗣 Алиса говорит — делаем unmute вне зависимости от "
+                f"grace_delay (статус: {state})"
+            )
+        else:
+            elapsed = time.monotonic() - self._last_mute_time
+            if elapsed < self._grace_delay:
+                logger.info(
+                    f"⏳ Пропускаем unmute — прошло только {elapsed:.2f}s "
+                    f"(нужно ≥ {self._grace_delay:.2f}s)"
+                )
+                return
+
         logger.info("🔊 Включение громкости")
         try:
             await self._ws_client.send_command(
