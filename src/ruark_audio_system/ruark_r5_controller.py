@@ -189,6 +189,14 @@ class RuarkR5Controller:
             InstanceID=0
         )
 
+    async def is_playing(self) -> bool:
+        """Проверка, воспроизводится ли что-либо"""
+        ruark_state = await self.get_transport_info()
+        play_state = ruark_state.get("CurrentTransportState")
+        if play_state == "PLAYING":
+            return True
+        return False
+
     async def set_play_mode(self, mode: PlayModeType) -> None:
         """Установка режима воспроизведения"""
         await asyncio.to_thread(

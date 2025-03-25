@@ -7,7 +7,7 @@ from injector import inject
 from core.config.settings import settings
 from main_stream_service.yandex_music_api import YandexMusicAPI
 from ruark_audio_system.ruark_r5_controller import RuarkR5Controller
-from yandex_station.constants import ALICE_ACTIVE_STATES
+from yandex_station.constants import ALICE_ACTIVE_STATES, FADE_TIME
 from yandex_station.models import Track
 from yandex_station.station_controls import YandexStationControls
 from yandex_station.station_ws_control import YandexStationClient
@@ -79,6 +79,13 @@ class MainStreamManager:
         self._tasks.clear()
         logger.info("✅ Стриминг остановлен")
 
+    async def fade_out_station(self, delay: float = FADE_TIME):
+        """Плавное отключение звука станции с задержкой"""
+        logger.info(f"🎧 Ждём {delay}s перед mute станции")
+        await asyncio.sleep(delay)
+        await self._station_controls.mute()
+        logger.info("🔇 Станция замьючена плавно")
+
     async def streaming(self):
         """Основной поток управления стримингом"""
         try:
@@ -128,9 +135,6 @@ class MainStreamManager:
                     if not track.playing:
                         await self._ruark_controls.stop()
 
-                    if speak_count > 0 and track.playing:
-                        await self._station_controls.mute()
-
                     if track.id == last_track.id:
                         track = (
                             await self._station_controls.get_current_track()
@@ -145,10 +149,12 @@ class MainStreamManager:
                         await self._send_track_to_stream_server(track_url)
                         last_track = track
 
-                    if speak_count > 0:
+                    if speak_count > 0 and track.playing:
+                        logger.info("🔁 Возвращаем громкость Ruark")
                         await self._ruark_controls.set_volume(
                             self._ruark_volume
                         )
+                        await self.fade_out_station(FADE_TIME)
                         speak_count = 0
 
                     current_volume = await self._station_controls.get_volume()
@@ -158,7 +164,7 @@ class MainStreamManager:
                         and track.duration - track.progress > 10
                         and track.playing
                     ):
-                        await self._station_controls.mute()
+                        await self.fade_out_station(FADE_TIME)
 
                     volume_set_count = 0
 
