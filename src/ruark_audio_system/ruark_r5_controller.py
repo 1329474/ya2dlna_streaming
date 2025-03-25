@@ -245,13 +245,30 @@ class RuarkR5Controller:
         )
         logger.info("🔇 Звук отключен" if mute else "🔊 Звук включен")
 
-    async def fade_out_ruark(self, volume: int):
-        """Плавное уменьшение громкости"""
-        if volume % 2 != 0:
-            volume -= 1
-        for v in range(volume, 2, -4):
-            await self.set_volume(v)
-            await asyncio.sleep(0.1)
+    async def fade_out_ruark(
+            self,
+            start_volume: int,
+            min_volume: int = 2,
+            step: int = 6,
+            delay: float = 0.1
+    ):
+        """Плавное уменьшение громкости Ruark в несколько шагов"""
+        volume = start_volume - start_volume % 2
+
+        logger.info(
+            f"🔉 Плавное снижение громкости Ruark: "
+            f"{volume} ➝ {min_volume} шагом {step}")
+
+        try:
+            for v in range(volume, min_volume - 1, -step):
+                logger.info(f"  ➤ Устанавливаем громкость: {v}")
+                await self.set_volume(v)
+                await asyncio.sleep(delay)
+
+            logger.info("✅ Плавное снижение громкости Ruark завершено")
+
+        except Exception as e:
+            logger.error(f"❌ Ошибка при снижении громкости Ruark: {e}")
 
     async def list_presets(self) -> str:
         """Получение списка пресетов"""

@@ -120,7 +120,7 @@ class MainStreamManager:
                             await self._ruark_controls.get_volume()
                         )
                         await self._ruark_controls.fade_out_ruark(
-                            self._ruark_volume
+                            start_volume=self._ruark_volume
                         )
 
                         if current_volume == 0:
