@@ -7,7 +7,7 @@ from injector import inject
 from core.config.settings import settings
 from main_stream_service.yandex_music_api import YandexMusicAPI
 from ruark_audio_system.ruark_r5_controller import RuarkR5Controller
-from yandex_station.constants import ALICE_ACTIVE_STATES
+from yandex_station.constants import ALICE_ACTIVE_STATES, RUARK_IDLE_VOLUME
 from yandex_station.models import Track
 from yandex_station.station_controls import YandexStationControls
 from yandex_station.station_ws_control import YandexStationClient
@@ -161,7 +161,7 @@ class MainStreamManager:
             volume_set_count += 1
             speak_count += 1
             self._ruark_volume = await self._ruark_controls.get_volume()
-            await self._ruark_controls.set_volume(2)
+            await self._ruark_controls.set_volume(RUARK_IDLE_VOLUME)
             if current_volume == 0:
                 await self._station_controls.unmute()
         return speak_count, volume_set_count
