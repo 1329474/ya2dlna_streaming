@@ -103,19 +103,59 @@ class MainStreamManager:
                 )
 
                 if current_alice_state != last_alice_state:
-                    speak_count, volume_set_count = (
-                        await self._handle_alice_state_change(
-                            current_alice_state, volume_set_count, speak_count
+                    current_volume = await self._station_controls.get_volume()
+                    if (
+                        current_alice_state in ALICE_ACTIVE_STATES
+                        and volume_set_count < 1
+                    ):
+                        volume_set_count += 1
+                        speak_count += 1
+
+                        self._ruark_volume = (
+                            await self._ruark_controls.get_volume()
                         )
-                    )
+                        await self._ruark_controls.set_volume(
+                            RUARK_IDLE_VOLUME
+                        )
+
+                        if current_volume == 0:
+                            await self._station_controls.unmute()
 
                 if current_alice_state == "IDLE":
-                    await self._handle_idle_state(
-                        track,
-                        last_track,
-                        speak_count
-                    )
-                    speak_count = 0
+                    if not track.playing:
+                        await self._ruark_controls.stop()
+
+                    if track.id == last_track.id:
+                        track = (
+                            await self._station_controls.get_current_track()
+                        )
+
+                    if last_track.id != track.id and track.playing:
+                        track_url = (
+                            await self._yandex_music_api.get_file_info(
+                                track.id
+                            )
+                        )
+                        await self._send_track_to_stream_server(track_url)
+                        last_track = track
+
+                    if speak_count > 0 and track.playing:
+                        logger.info("🔁 Возвращаем громкость Ruark")
+                        await self._ruark_controls.set_volume(
+                            self._ruark_volume
+                        )
+                        await self._station_controls.fade_out_station()
+                        speak_count = 0
+
+                    current_volume = await self._station_controls.get_volume()
+
+                    if (
+                        current_volume > 0
+                        and track.duration - track.progress > 10
+                        and track.playing
+                    ):
+                        await self._station_controls.fade_out_station()
+
                     volume_set_count = 0
 
                 if (
@@ -133,7 +173,6 @@ class MainStreamManager:
                     f"проигрывание: {track.playing}"
                 )
 
-                last_track = track
                 last_alice_state = current_alice_state
                 await asyncio.sleep(1.0)
 
@@ -149,80 +188,6 @@ class MainStreamManager:
         if await self._ruark_controls.get_power_status() == "0":
             await self._ruark_controls.turn_power_on()
         self._ruark_volume = await self._ruark_controls.get_volume()
-
-    async def _handle_alice_state_change(
-            self,
-            current_alice_state,
-            volume_set_count,
-            speak_count
-    ):
-        current_volume = await self._station_controls.get_volume()
-        if current_alice_state in ALICE_ACTIVE_STATES and volume_set_count < 1:
-            volume_set_count += 1
-            speak_count += 1
-            self._ruark_volume = await self._ruark_controls.get_volume()
-            await self._ruark_controls.set_volume(RUARK_IDLE_VOLUME)
-            if current_volume == 0:
-                await self._station_controls.unmute()
-        return speak_count, volume_set_count
-
-    async def _handle_idle_state(
-            self,
-            track: Track,
-            last_track: Track,
-            speak_count: int
-    ):
-        if not track.playing:
-            await self._ruark_controls.stop()
-
-        if track.id == last_track.id:
-            track = await self._station_controls.get_current_track()
-
-        if last_track.id != track.id:
-            track = await self._wait_for_track_ready()
-
-            if track.playing and track.duration > 0:
-                track_url = (
-                    await self._yandex_music_api.get_file_info(track.id)
-                )
-                await self._send_track_to_stream_server(track_url)
-
-        if speak_count > 0:
-            track = await self._wait_for_track_ready()
-            if track.playing and track.duration > 0:
-                logger.info("🔁 Возвращаем громкость Ruark")
-                await self._ruark_controls.set_volume(self._ruark_volume)
-                await self._station_controls.fade_out_station()
-            else:
-                logger.warning("⚠️ Трек неактивен — возврат громкости отменён")
-
-        current_volume = await self._station_controls.get_volume()
-        if (
-            current_volume > 0
-            and track.duration - track.progress > 10
-            and track.playing
-        ):
-            await self._station_controls.fade_out_station()
-
-    async def _wait_for_track_ready(
-            self,
-            max_attempts: int = 5,
-            delay: float = 0.2
-            ) -> Track:
-        """
-        Ожидает, пока начнётся воспроизведение трека
-        (playing=True и duration > 0)
-        Возвращает актуальный трек, даже если условия не были выполнены.
-        """
-        for attempt in range(1, max_attempts + 1):
-            track = await self._station_controls.get_current_track()
-            if track.playing and track.duration > 0:
-                logger.info(f"✅ Трек активен на попытке {attempt}")
-                return track
-            logger.warning(f"⏳ Ожидаем трек (попытка {attempt})...")
-            await asyncio.sleep(delay)
-        logger.warning("⚠️ Трек так и не активировался за отведённое время")
-        return track
 
     async def _send_track_to_stream_server(self, track_url: str):
         """Отправляет ссылку на трек на стрим сервер"""
