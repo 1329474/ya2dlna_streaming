@@ -173,14 +173,23 @@ class MainStreamManager:
         if track.id == last_track.id:
             track = await self._station_controls.get_current_track()
 
-        if last_track.id != track.id and track.playing:
-            track_url = await self._yandex_music_api.get_file_info(track.id)
-            await self._send_track_to_stream_server(track_url)
+        if last_track.id != track.id:
+            track = await self._wait_for_track_ready()
+
+            if track.playing and track.duration > 0:
+                track_url = (
+                    await self._yandex_music_api.get_file_info(track.id)
+                )
+                await self._send_track_to_stream_server(track_url)
 
         if speak_count > 0:
-            logger.info("🔁 Возвращаем громкость Ruark")
-            await self._ruark_controls.set_volume(self._ruark_volume)
-            await self._station_controls.fade_out_station()
+            track = await self._wait_for_track_ready()
+            if track.playing and track.duration > 0:
+                logger.info("🔁 Возвращаем громкость Ruark")
+                await self._ruark_controls.set_volume(self._ruark_volume)
+                await self._station_controls.fade_out_station()
+            else:
+                logger.warning("⚠️ Трек неактивен — возврат громкости отменён")
 
         current_volume = await self._station_controls.get_volume()
         if (
@@ -189,6 +198,26 @@ class MainStreamManager:
             and track.playing
         ):
             await self._station_controls.fade_out_station()
+
+    async def _wait_for_track_ready(
+            self,
+            max_attempts: int = 5,
+            delay: float = 0.2
+            ) -> Track:
+        """
+        Ожидает, пока начнётся воспроизведение трека
+        (playing=True и duration > 0)
+        Возвращает актуальный трек, даже если условия не были выполнены.
+        """
+        for attempt in range(1, max_attempts + 1):
+            track = await self._station_controls.get_current_track()
+            if track.playing and track.duration > 0:
+                logger.info(f"✅ Трек активен на попытке {attempt}")
+                return track
+            logger.warning(f"⏳ Ожидаем трек (попытка {attempt})...")
+            await asyncio.sleep(delay)
+        logger.warning("⚠️ Трек так и не активировался за отведённое время")
+        return track
 
     async def _send_track_to_stream_server(self, track_url: str):
         """Отправляет ссылку на трек на стрим сервер"""

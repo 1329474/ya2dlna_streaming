@@ -1,3 +1,4 @@
+from core.logging.setup import setup_logging  # noqa
 import ipaddress
 from logging import getLogger
 from time import sleep
@@ -15,11 +16,11 @@ class DeviceFinder(ServiceListener):
         self.device = {}
         self.zeroconf = Zeroconf()
 
-    def find_devices(self):
+    def find_devices(self, type_="_yandexio._tcp.local."):
         """Поиск устройств Yandex Station в сети."""
         self.browser = ServiceBrowser(
             zc=self.zeroconf,
-            type_="_yandexio._tcp.local.",
+            type_=type_,
             handlers=[self._handler_device]
         )
         sleep(1)
