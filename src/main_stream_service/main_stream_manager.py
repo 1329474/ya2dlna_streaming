@@ -161,9 +161,7 @@ class MainStreamManager:
             volume_set_count += 1
             speak_count += 1
             self._ruark_volume = await self._ruark_controls.get_volume()
-            await self._ruark_controls.fade_out_ruark(
-                start_volume=self._ruark_volume
-            )
+            await self._ruark_controls.set_volume(2)
             if current_volume == 0:
                 await self._station_controls.unmute()
         return speak_count, volume_set_count
