@@ -144,7 +144,9 @@ class MainStreamManager:
                         await self._ruark_controls.set_volume(
                             self._ruark_volume
                         )
-                        await self._station_controls.fade_out_station()
+                        while not await self._ruark_controls.is_playing():
+                            await asyncio.sleep(0.1)
+                        await self._station_controls.fade_out_alice_volume()
                         speak_count = 0
 
                     current_volume = await self._station_controls.get_volume()
@@ -154,7 +156,7 @@ class MainStreamManager:
                         and track.duration - track.progress > 10
                         and track.playing
                     ):
-                        await self._station_controls.fade_out_station()
+                        await self._station_controls.fade_out_alice_volume()
 
                     volume_set_count = 0
 

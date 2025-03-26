@@ -193,3 +193,36 @@ class YandexStationControls:
         logger.info(f"🎧 Ждём {FADE_TIME}s перед mute станции")
         await asyncio.sleep(FADE_TIME)
         await self.mute()
+
+    async def fade_out_alice_volume(
+            self,
+            min_volume: float = 0.0,
+            step: float = 0.1,
+            delay: float = 0.3
+    ):
+        """Плавное уменьшение громкости Алисы в несколько шагов"""
+        if self._was_muted:
+            return
+        logger.info(f"🎧 Ждём {FADE_TIME}s перед fade out громкости")
+        await asyncio.sleep(FADE_TIME)
+        self._volume = await self.get_volume()
+        start_volume = self._volume
+        volume = round(start_volume - (start_volume % step), 1)
+
+        logger.info(
+            f"🔉 Плавное снижение громкости Алисы: "
+            f"{volume:.1f} ➝ {min_volume:.1f} шагом {step}")
+
+        try:
+            v = volume
+            while v > min_volume:
+                await self.set_volume(round(v, 1))
+                logger.info(f"  ➤ Устанавливаем громкость: {v:.1f}")
+                v -= step
+                await asyncio.sleep(delay)
+
+            await self.set_volume(round(min_volume, 1))
+            self._was_muted = True
+            logger.info("✅ Плавное снижение громкости Алисы завершено")
+        except Exception as e:
+            logger.error(f"❌ Ошибка при снижении громкости Алисы: {e}")
