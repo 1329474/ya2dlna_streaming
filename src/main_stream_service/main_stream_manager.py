@@ -166,7 +166,12 @@ class MainStreamManager:
                 await self._station_controls.unmute()
         return speak_count, volume_set_count
 
-    async def _handle_idle_state(self, track, last_track, speak_count):
+    async def _handle_idle_state(
+            self,
+            track: Track,
+            last_track: Track,
+            speak_count: int
+    ):
         if not track.playing:
             await self._ruark_controls.stop()
 
