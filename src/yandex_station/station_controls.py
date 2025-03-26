@@ -191,4 +191,3 @@ class YandexStationControls:
         logger.info(f"🎧 Ждём {FADE_TIME}s перед mute станции")
         await asyncio.sleep(FADE_TIME)
         await self.mute()
-        logger.info("🔇 Станция замьючена плавно")
