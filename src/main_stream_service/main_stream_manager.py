@@ -177,7 +177,7 @@ class MainStreamManager:
             track_url = await self._yandex_music_api.get_file_info(track.id)
             await self._send_track_to_stream_server(track_url)
 
-        if speak_count > 0 and track.playing:
+        if speak_count > 0:
             logger.info("🔁 Возвращаем громкость Ruark")
             await self._ruark_controls.set_volume(self._ruark_volume)
             await self._station_controls.fade_out_station()
