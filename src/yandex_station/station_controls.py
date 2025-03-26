@@ -188,6 +188,8 @@ class YandexStationControls:
 
     async def fade_out_station(self):
         """Плавное отключение звука станции с задержкой"""
+        if self._was_muted:
+            return
         logger.info(f"🎧 Ждём {FADE_TIME}s перед mute станции")
         await asyncio.sleep(FADE_TIME)
         await self.mute()
