@@ -165,12 +165,10 @@ class MainStreamManager:
                 ):
                     await self._station_controls.unmute()
 
-                logger.info(
-                    f"🎵 Сейчас играет: {track.id} - {track.artist} - "
-                    f"{track.title} - {track.progress}/{track.duration}, "
-                    f"статус Алисы: {current_alice_state}, "
-                    f"предыдущий статус Алисы: {last_alice_state}, "
-                    f"проигрывание: {track.playing}"
+                self._log_current_track(
+                    track,
+                    current_alice_state,
+                    last_alice_state
                 )
 
                 last_alice_state = current_alice_state
@@ -222,3 +220,12 @@ class MainStreamManager:
                     f"Ответ от стрим сервера: {response.get('message')}"
                 )
                 return response
+
+    def _log_current_track(self, track: Track, state: str, last_state: str):
+        logger.info(
+            f"🎵 Сейчас играет: {track.id} - {track.artist} - "
+            f"{track.title} - {track.progress}/{track.duration}, "
+            f"статус Алисы: {state}, "
+            f"предыдущий статус Алисы: {last_state}, "
+            f"проигрывание: {track.playing}"
+        )
