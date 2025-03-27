@@ -144,10 +144,24 @@ class MainStreamManager:
                         await self._ruark_controls.set_volume(
                             self._ruark_volume
                         )
-                        while not await self._ruark_controls.is_playing():
+
+                        for _ in range(30):
+                            if await self._ruark_controls.is_playing():
+                                logger.info("▶️ Ruark начал играть")
+                                await self._station_controls.\
+                                    fade_out_alice_volume()
+                                speak_count = 0
+                                break
                             await asyncio.sleep(0.1)
-                        await self._station_controls.fade_out_alice_volume()
-                        speak_count = 0
+                        else:
+                            logger.warning(
+                                "⚠️ Ruark так и не начал играть, "
+                                "перезапуск трека на стрим сервере"
+                            )
+                            await self._send_track_to_stream_server(track_url)
+                            await self._station_controls.\
+                                fade_out_alice_volume()
+                            speak_count = 0
 
                     if speak_count > 0 and not track.playing:
                         await self._ruark_controls.set_volume(

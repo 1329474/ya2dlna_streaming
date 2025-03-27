@@ -250,7 +250,8 @@ class YandexStationClient:
         """Возвращает самое последнее сообщение из очереди или None,
         если очередь пуста.
         """
-        return self.queue[-1] if self.queue else None
+        latest = self.queue[-1] if self.queue else None
+        return latest
 
     async def _cancel_tasks(self):
         """Отмена всех активных задач, чтобы избежать зависших WebSocket."""
