@@ -197,6 +197,12 @@ class RuarkR5Controller:
             InstanceID=0
         )
 
+    async def get_current_rel_time(self) -> str:
+        """Получение текущего времени в секундах"""
+        position_info = await self.get_position_info()
+        rel_time = position_info.get("RelTime")
+        return rel_time
+
     async def is_playing(self) -> bool:
         """Проверка, воспроизводится ли что-либо"""
         ruark_state = await self.get_transport_info()

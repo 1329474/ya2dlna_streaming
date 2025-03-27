@@ -5,6 +5,7 @@ import aiohttp
 from injector import inject
 
 from core.config.settings import settings
+from main_stream_service.utils import parse_time_to_seconds
 from main_stream_service.yandex_music_api import YandexMusicAPI
 from ruark_audio_system.ruark_r5_controller import RuarkR5Controller
 from yandex_station.constants import ALICE_ACTIVE_STATES, RUARK_IDLE_VOLUME
@@ -137,6 +138,7 @@ class MainStreamManager:
                             )
                         )
                         await self._send_track_to_stream_server(track_url)
+                        await self._sync_ruark_to_track(track.progress)
                         last_track = track
 
                     if speak_count > 0 and track.playing:
@@ -241,6 +243,51 @@ class MainStreamManager:
                     f"Ответ от стрим сервера: {response.get('message')}"
                 )
                 return response
+
+    async def _sync_ruark_to_track(self, track_progress: float):
+        """
+        Синхронизирует воспроизведение Ruark с треком по прогрессу Алисы
+        через паузу и точный delay. Работает только в одну сторону (если
+        Ruark отстаёт).
+        """
+        max_attempts = 5
+
+        await asyncio.sleep(1.5)
+
+        for attempt in range(1, max_attempts + 1):
+            rel_time_str = await self._ruark_controls.get_current_rel_time()
+            rel_time_sec = await parse_time_to_seconds(rel_time_str)
+            delay = track_progress - rel_time_sec
+
+            if delay > 10:
+                logger.warning("❗ Ruark отстаёт на слишком большой величине")
+                return
+
+            logger.info(
+                f"[Попытка {attempt}] 🎵 Синхронизация: "
+                f"Алиса: {track_progress:.3f}s, "
+                f"Ruark: {rel_time_sec:.3f}s, "
+                f"рассинхрон: {delay:.3f}s"
+            )
+
+            if delay > 0.2:
+                logger.info(f"⏸ Пауза для выравнивания на {delay:.3f}s")
+                await self._ruark_controls.pause()
+                await asyncio.sleep(delay)
+                await self._ruark_controls.play()
+                logger.info("▶️ Повторное воспроизведение после паузы")
+                await asyncio.sleep(1.5)
+            elif delay < -0.3:
+                logger.warning("⚠️ Ruark опережает — пока не корректируем")
+                break
+            else:
+                logger.info("✅ Ruark и трек уже синхронизированы")
+                break
+        else:
+            logger.warning(
+                "❗ Не удалось точно синхронизировать Ruark "
+                "после нескольких попыток"
+            )
 
     def _log_current_track(self, track: Track, state: str, last_state: str):
         logger.info(
