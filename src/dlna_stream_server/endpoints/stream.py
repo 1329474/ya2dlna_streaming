@@ -44,5 +44,5 @@ async def serve_head():
 async def stop_stream():
     """Останавливает потоковую передачу на Ruark."""
     logger.info("🛑 Остановка потоковой передачи...")
-    await stream_handler.stop_ffmpeg()
+    await stream_handler.stop_stream()
     return {"message": "Потоковая передача остановлена"}

@@ -1,8 +1,10 @@
 import asyncio
+import tempfile
+import os
+import shutil
 from logging import getLogger
 
-from fastapi import HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse
 
 from core.config.settings import settings
 from ruark_audio_system.ruark_r5_controller import RuarkR5Controller
@@ -11,136 +13,83 @@ logger = getLogger(__name__)
 
 
 class StreamHandler:
-    """Класс для управления потоковой передачей и воспроизведением на Ruark."""
+    """Класс для управления потоковой передачей через временный mp3-файл."""
+
     def __init__(self, ruark_controls: RuarkR5Controller):
-        self._ruark_lock = asyncio.Lock()
-        self._ffmpeg_process: asyncio.subprocess.Process | None = None
         self._ruark_controls = ruark_controls
+        self._ruark_lock = asyncio.Lock()
+        self._temp_dir = tempfile.mkdtemp(prefix="ruark_stream_")
+        self._current_file_path: str | None = None
 
     async def execute_with_lock(self, func, *args, **kwargs):
-        """Выполняет вызов UPnP-команды в Ruark с блокировкой."""
         async with self._ruark_lock:
             for attempt in range(3):
                 try:
-                    logger.debug(
-                        f"Выполняем {func.__name__} с аргументами "
-                        f"{args}, {kwargs}"
-                    )
+                    logger.debug(f"Выполняем {func.__name__} с аргументами {args}, {kwargs}")
                     await func(*args, **kwargs)
                     logger.debug(f"✅ {func.__name__} выполнено успешно")
                     return
                 except Exception as e:
-                    logger.warning(
-                        f"⚠️ Ошибка при {func.__name__}, "
-                        f"попытка {attempt + 1}: {e}"
-                    )
+                    logger.warning(f"⚠️ Ошибка при {func.__name__}, попытка {attempt + 1}: {e}")
                     await asyncio.sleep(1)
 
-    async def stop_ffmpeg(self):
-        """Останавливает текущий процесс FFmpeg, если он запущен."""
-        if self._ffmpeg_process:
-            logger.info("⏹ Останавливаем текущий поток FFmpeg...")
-
+    async def stop_stream(self):
+        logger.info("⏹ Останавливаем текущий трек и удаляем файл...")
+        await self.execute_with_lock(self._ruark_controls.stop)
+        if self._current_file_path and os.path.exists(self._current_file_path):
             try:
-                self._ffmpeg_process.terminate()
-                logger.info("📤 SIGTERM отправлен FFmpeg")
-
-                try:
-                    await asyncio.wait_for(
-                        self._ffmpeg_process.wait(),
-                        timeout=5
-                    )
-                    logger.info(
-                        f"✅ FFmpeg завершился, код: "
-                        f"{self._ffmpeg_process.returncode}, "
-                        f"PID: {self._ffmpeg_process.pid}"
-                    )
-                except asyncio.TimeoutError:
-                    logger.warning(
-                        "⚠️ FFmpeg не завершился вовремя, "
-                        "принудительное завершение."
-                    )
-                    self._ffmpeg_process.kill()
-                    logger.debug("💀 Отправили kill()")
-
-                    try:
-                        await asyncio.wait_for(
-                            self._ffmpeg_process.wait(),
-                            timeout=5
-                        )
-                        logger.info(
-                            f"✅ FFmpeg принудительно завершён, код: "
-                            f"{self._ffmpeg_process.returncode}"
-                        )
-                    except asyncio.TimeoutError:
-                        logger.error(
-                            "❌ FFmpeg не завершился даже после kill() — "
-                            "залипший процесс!"
-                        )
-
-            except ProcessLookupError:
-                logger.warning("⚠️ FFmpeg уже завершился (ProcessLookupError)")
+                os.remove(self._current_file_path)
+                logger.info(f"🗑 Удалён временный файл: {self._current_file_path}")
             except Exception as e:
-                logger.exception(f"❌ Ошибка при остановке FFmpeg: {e}")
-            finally:
-                self._ffmpeg_process = None
+                logger.warning(f"⚠️ Не удалось удалить файл: {e}")
+        self._current_file_path = None
 
-    async def start_ffmpeg_stream(self, yandex_url: str):
-        """Запускает потоковую передачу через FFmpeg."""
-        await self.stop_ffmpeg()  # Останавливаем старый процесс
+    async def start_ffmpeg_to_file(self, yandex_url: str):
+        """Скачивает и перекодирует трек в mp3-файл."""
+        await self.stop_stream()
 
-        logger.info(f"🎥 Запуск потоковой передачи с {yandex_url}")
+        temp_file_path = os.path.join(self._temp_dir, "track.mp3")
+        logger.info(f"🎧 Качаем и кодируем трек в {temp_file_path}")
 
-        self._ffmpeg_process = await asyncio.create_subprocess_exec(
-            "ffmpeg", "-re",  # Читаем файл с реальной скоростью
-            "-i", yandex_url,  # Прямая передача ссылки
-            "-acodec", "libmp3lame", "-b:a", "320k", "-f", "mp3", "pipe:1",
-            stdout=asyncio.subprocess.PIPE,
+        process = await asyncio.create_subprocess_exec(
+            "ffmpeg", "-y", "-i", yandex_url,
+            "-acodec", "libmp3lame", "-b:a", "320k",
+            temp_file_path,
+            stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.PIPE
         )
-        logger.info(
-            f"🎥 Запущен процесс FFmpeg с PID: {self._ffmpeg_process.pid}"
-        )
+        _, stderr = await process.communicate()
+
+        if process.returncode != 0:
+            logger.error(f"❌ Ошибка ffmpeg: {stderr.decode()}")
+            raise Exception("Ошибка перекодировки ffmpeg")
+
+        logger.info(f"✅ Трек перекодирован: {temp_file_path}")
+        self._current_file_path = temp_file_path
 
     async def stream_audio(self):
-        if not self._ffmpeg_process:
-            raise HTTPException(status_code=404, detail="Поток не запущен")
+        """Отдаёт закодированный файл в ответе FastAPI."""
+        if not self._current_file_path:
+            raise Exception("Поток не запущен")
 
-        async def generate():
-            try:
-                while True:
-                    chunk = await self._ffmpeg_process.stdout.read(4096)
-                    if not chunk:
-                        break
-                    yield chunk
-            except asyncio.CancelledError:
-                logger.info("🔌 Клиент отключился от стрима")
-                await self.stop_ffmpeg()
-                raise
-            except Exception as e:
-                logger.warning(f"⚠️ Ошибка в генераторе потока: {e}")
-
-        return StreamingResponse(generate(), media_type="audio/mpeg")
+        logger.info(f"📡 Отдаём файл: {self._current_file_path}")
+        return FileResponse(self._current_file_path, media_type="audio/mpeg")
 
     async def play_stream(self, yandex_url: str):
-        """Запускает потоковую трансляцию и передает её на Ruark."""
-        logger.info(f"🎶 Начинаем потоковое воспроизведение {yandex_url}")
+        """Запускает воспроизведение локального mp3-файла на Ruark."""
+        await self.stop_stream()
+        await self.start_ffmpeg_to_file(yandex_url)
 
-        # Запускаем потоковую передачу
-        await self.start_ffmpeg_stream(yandex_url)
         track_url = (
-            f"http://{settings.local_server_host}:"
-            f"{settings.local_server_port_dlna}/live_stream.mp3"
+            f"http://{settings.local_server_host}:{settings.local_server_port_dlna}/live_stream.mp3"
         )
         logger.info(f"📡 Поток доступен по URL: {track_url}")
 
-        # Устанавливаем новый поток
-        await self.execute_with_lock(
-            self._ruark_controls.set_av_transport_uri,
-            track_url
-        )
+        await self.execute_with_lock(self._ruark_controls.set_av_transport_uri, track_url)
+        await self.execute_with_lock(self._ruark_controls.play)
 
-        # Запускаем воспроизведение
-        await self.execute_with_lock(
-            self._ruark_controls.play
-        )
+    def cleanup(self):
+        """Удаление временной директории при завершении приложения."""
+        if os.path.exists(self._temp_dir):
+            shutil.rmtree(self._temp_dir)
+            logger.info(f"🧹 Удалена временная директория: {self._temp_dir}")

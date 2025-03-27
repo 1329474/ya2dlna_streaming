@@ -5,7 +5,8 @@ import aiohttp
 from injector import inject
 
 from core.config.settings import settings
-from main_stream_service.utils import parse_time_to_seconds
+from main_stream_service.utils import (parse_seconds_to_time,
+                                       parse_time_to_seconds)
 from main_stream_service.yandex_music_api import YandexMusicAPI
 from ruark_audio_system.ruark_r5_controller import RuarkR5Controller
 from yandex_station.constants import ALICE_ACTIVE_STATES, RUARK_IDLE_VOLUME
@@ -138,7 +139,7 @@ class MainStreamManager:
                             )
                         )
                         await self._send_track_to_stream_server(track_url)
-                        await self._sync_ruark_to_track(track.progress)
+                        await self._sync_ruark_to_track()
                         last_track = track
 
                     if speak_count > 0 and track.playing:
@@ -146,7 +147,9 @@ class MainStreamManager:
                         await self._ruark_controls.set_volume(
                             self._ruark_volume
                         )
-
+                        await self._ruark_controls.fade_in_ruark(
+                            max_volume=self._ruark_volume
+                        )
                         for _ in range(30):
                             if await self._ruark_controls.is_playing():
                                 logger.info("▶️ Ruark начал играть")
@@ -169,6 +172,9 @@ class MainStreamManager:
                         await self._ruark_controls.set_volume(
                             self._ruark_volume
                         )
+                        await self._ruark_controls.fade_in_ruark(
+                            max_volume=self._ruark_volume
+                        )
 
                     current_volume = await self._station_controls.get_volume()
 
@@ -182,7 +188,7 @@ class MainStreamManager:
                     volume_set_count = 0
 
                 if (
-                    track.duration - track.progress < 1
+                    track.duration - track.progress < 2
                     and current_alice_state == "IDLE"
                     and track.playing
                 ):
@@ -244,50 +250,73 @@ class MainStreamManager:
                 )
                 return response
 
-    async def _sync_ruark_to_track(self, track_progress: float):
+    async def _sync_ruark_to_track(self):
         """
-        Синхронизирует воспроизведение Ruark с треком по прогрессу Алисы
-        через паузу и точный delay. Работает только в одну сторону (если
-        Ruark отстаёт).
+        Синхронизирует воспроизведение Ruark с текущим прогрессом трека Алисы
+        через серию SEEK с использованием виртуального таймера.
         """
-        max_attempts = 5
+        import time
+        max_delay_threshold = 8.0       # если отрыв больше — не трогаем
+        min_sync_threshold = 0.3        # допустимая погрешность
+        max_attempts = 3
 
-        await asyncio.sleep(1.5)
+        logger.info("⏱ Запуск таймера синхронизации")
 
-        for attempt in range(1, max_attempts + 1):
+        try:
+            await asyncio.sleep(4)
             rel_time_str = await self._ruark_controls.get_current_rel_time()
             rel_time_sec = await parse_time_to_seconds(rel_time_str)
-            delay = track_progress - rel_time_sec
+        except Exception as e:
+            logger.error(f"❌ Не удалось получить позицию Ruark: {e}")
+            return
 
-            if delay > 10:
-                logger.warning("❗ Ruark отстаёт на слишком большой величине")
-                return
+        start_ts = time.monotonic()
+        base_ruark = rel_time_sec
+
+        for attempt in range(1, max_attempts + 1):
+            await asyncio.sleep(1)
+
+            # виртуальное время Ruark
+            elapsed = time.monotonic() - start_ts
+            ruark_virtual = base_ruark + elapsed
+
+            track = await self._station_controls.get_current_track()
+            delay = track.progress - ruark_virtual
 
             logger.info(
-                f"[Попытка {attempt}] 🎵 Синхронизация: "
-                f"Алиса: {track_progress:.3f}s, "
-                f"Ruark: {rel_time_sec:.3f}s, "
-                f"рассинхрон: {delay:.3f}s"
+                f"[{attempt}] Таймер: Ruark {ruark_virtual:.2f}s "
+                f"vs Алиса {track.progress:.2f}s, Δ={delay:.2f}s"
             )
 
-            if delay > 0.2:
-                logger.info(f"⏸ Пауза для выравнивания на {delay:.3f}s")
-                await self._ruark_controls.pause()
-                await asyncio.sleep(delay)
-                await self._ruark_controls.play()
-                logger.info("▶️ Повторное воспроизведение после паузы")
-                await asyncio.sleep(1.5)
-            elif delay < -0.3:
-                logger.warning("⚠️ Ruark опережает — пока не корректируем")
-                break
-            else:
-                logger.info("✅ Ruark и трек уже синхронизированы")
-                break
-        else:
-            logger.warning(
-                "❗ Не удалось точно синхронизировать Ruark "
-                "после нескольких попыток"
-            )
+            if abs(delay) < min_sync_threshold:
+                logger.info("✅ Ruark синхронизирован")
+                return
+
+            if abs(delay) > max_delay_threshold:
+                logger.warning("⚠️ Таймер: слишком большой рассинхрон — прерываем")
+                return
+
+            target_time = ruark_virtual + delay
+            seek_time = await parse_seconds_to_time(target_time + 0.2)
+            logger.info(f"🔁 Seek к {seek_time}")
+
+            try:
+                await self._ruark_controls.seek(seek_time)
+            except Exception as e:
+                logger.error(f"❌ Ошибка при SEEK: {e}")
+                return
+
+            # после seek — обновим старт отсчёта
+            try:
+                rel_time_str = await self._ruark_controls.get_current_rel_time()
+                rel_time_sec = await parse_time_to_seconds(rel_time_str)
+                start_ts = time.monotonic()
+                base_ruark = rel_time_sec
+            except Exception as e:
+                logger.error(f"❌ Ошибка после SEEK: {e}")
+                return
+
+        logger.warning("⚠️ Таймер: не удалось синхронизировать после 3 попыток")
 
     def _log_current_track(self, track: Track, state: str, last_state: str):
         logger.info(

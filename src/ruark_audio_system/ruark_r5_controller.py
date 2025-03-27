@@ -240,6 +240,31 @@ class RuarkR5Controller:
         )
         logger.info(f"🔊 Громкость установлена на {volume}")
 
+    async def fade_in_ruark(
+            self,
+            max_volume: int,
+            start_volume: int = 2,
+            step: int = 6,
+            delay: float = 0.1
+    ):
+        """Плавное увеличение громкости Ruark в несколько шагов"""
+        volume = start_volume - start_volume % 2
+
+        logger.info(
+            f"🔉 Плавное увеличение громкости Ruark: "
+            f"{volume} ➝ {max_volume} шагом {step}")
+
+        try:
+            for v in range(volume, max_volume + 1, step):
+                logger.info(f"  ➤ Устанавливаем громкость: {v}")
+                await self.set_volume(v)
+                await asyncio.sleep(delay)
+
+            logger.info("✅ Плавное увеличение громкости Ruark завершено")
+
+        except Exception as e:
+            logger.error(f"❌ Ошибка при увеличении громкости Ruark: {e}")
+
     async def get_mute(self) -> bool:
         """Получение состояния mute"""
         result = await asyncio.to_thread(
