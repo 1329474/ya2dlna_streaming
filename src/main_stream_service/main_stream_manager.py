@@ -149,6 +149,11 @@ class MainStreamManager:
                         await self._station_controls.fade_out_alice_volume()
                         speak_count = 0
 
+                    if speak_count > 0 and not track.playing:
+                        await self._ruark_controls.set_volume(
+                            self._ruark_volume
+                        )
+
                     current_volume = await self._station_controls.get_volume()
 
                     if (
