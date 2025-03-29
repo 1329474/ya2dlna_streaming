@@ -54,10 +54,9 @@ class MainStreamManager:
         self._stream_state_running = True
 
         # Запуск WebSocket-клиента
-        ws_task = asyncio.create_task(self._station_controls.start_ws_client())
+        await self._station_controls.start_ws_client()
         stream_task = asyncio.create_task(self.streaming())
-
-        self._tasks.extend([ws_task, stream_task])
+        self._tasks.extend([stream_task])
 
     async def stop(self):
         """Остановка всех стриминговых процессов"""

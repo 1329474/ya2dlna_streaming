@@ -26,12 +26,8 @@ class YandexStationControls:
 
     async def start_ws_client(self):
         """Запуск WebSocket-клиента"""
-        if self._ws_task and not self._ws_task.done():
-            logger.warning("‼ WebSocket-клиент уже запущен")
-            return
-
         logger.info("🔄 Запуск WebSocket-клиента")
-        self._ws_task = asyncio.create_task(self._ws_client.connect())
+        await self._ws_client.run_once()
 
     async def stop_ws_client(self):
         """Остановка WebSocket-клиента"""

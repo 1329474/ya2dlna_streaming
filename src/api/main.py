@@ -16,10 +16,15 @@ app = FastAPI()
 
 app.include_router(main_router)
 
-if __name__ == "__main__":
+
+def main():
     logger.info("▶️ Запуск API сервера...")
     uvicorn.run(
         app,
         host=settings.local_server_host,
         port=settings.local_server_port_api
     )
+
+
+if __name__ == "__main__":
+    main()

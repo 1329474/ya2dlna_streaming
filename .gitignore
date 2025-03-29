@@ -148,3 +148,13 @@ cache/
 
 #  IDE
 .vscode/
+
+# PyInstaller
+ya2dlna_streaming
+ya2dlna_streaming.spec
+ya2dlna_streaming.spec.py
+ya2dlna_streaming.spec.pyc
+ya2dlna_streaming.spec.pyo
+ya2dlna_streaming.spec.pyd
+ya2dlna_streaming.spec.pyw
+ya2dlna_streaming.spec.pyz

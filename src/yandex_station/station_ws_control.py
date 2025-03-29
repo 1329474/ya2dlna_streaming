@@ -37,6 +37,7 @@ class YandexStationClient:
         self.device_token = None
         self.running = True
         self.reconnect_required = False
+        self._connect_task: asyncio.Task | None = None
         self.tasks = []  # Хранение фоновых задач
 
         self.device_finder.find_devices()  # Поиск устройств Yandex в сети
@@ -47,96 +48,110 @@ class YandexStationClient:
             f"{self.device_finder.device['port']}"
         )
 
+    async def run_once(self):
+        """Гарантированный однократный запуск WebSocket"""
+        if self._connect_task and not self._connect_task.done():
+            logger.warning("⚠️ WebSocket уже запущен")
+            return
+
+        logger.info("🚀 Запуск WebSocket-клиента в новой задаче")
+        self._connect_task = asyncio.create_task(self.connect())
+
     async def connect(self):
         """Подключение к WebSocket станции."""
         ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
         ssl_context.check_hostname = False
         ssl_context.verify_mode = ssl.CERT_NONE
 
-        while True:
-            self.reconnect_required = False
-            self.running = True
+        try:
+            while True:
+                self.reconnect_required = False
+                self.running = True
 
-            try:
-                if not self.device_token:
-                    self.device_token = await get_device_token(
-                        self.device_id, self.platform
-                    )
-
-                if self.websocket is not None and not self.websocket.closed:
-                    logger.warning(
-                        "⚠️ Обнаружено старое WebSocket-соединение, закрываем."
-                    )
-                    await self.close()
-
-                if self.session:
-                    logger.info(
-                        "🔄 Обнаружена существующая HTTP-сессия, закрываем..."
-                    )
-                    await self.session.close()
-                    self.session = None
-
-                async with aiohttp.ClientSession() as session:
-                    self.session = session
-                    logger.info(f"🔄 Подключение к станции: {self.uri}")
-                    self.websocket = await session.ws_connect(
-                        self.uri,
-                        ssl=ssl_context,
-                        timeout=aiohttp.ClientWSTimeout(ws_close=10),
-                    )
-                    logger.info(
-                        "✅ Подключение к WebSocket станции установлено"
-                    )
-
-                    await self._cancel_tasks()
-                    stream_status_task = asyncio.create_task(
-                        self.stream_station_messages()
-                    )
-                    command_producer_task = asyncio.create_task(
-                        self.command_producer_handler()
-                    )
-                    keep_alive_ws_task = asyncio.create_task(
-                        self.keep_alive_ws_connection()
-                    )
-
-                    self.tasks = [
-                        stream_status_task,
-                        command_producer_task,
-                        keep_alive_ws_task,
-                    ]
-
-                    auth_success = await self.authenticate()
-                    if not auth_success:
-                        logger.warning(
-                            "❌ Ошибка авторизации! Требуется новый токен."
+                try:
+                    if not self.device_token:
+                        self.device_token = await get_device_token(
+                            self.device_id, self.platform
                         )
-                        await self.refresh_token()
-                        continue  # Попробуем снова
 
-                    results = await asyncio.gather(
-                        *self.tasks, return_exceptions=True
-                    )
-                    for i, result in enumerate(results):
-                        if isinstance(result, Exception):
-                            logger.error(
-                                f"Задача {i} завершилась с ошибкой: {result}"
+                    if self.websocket is not None and not self.websocket.closed:
+                        logger.warning(
+                            "⚠️ Обнаружено старое WebSocket-соединение, закрываем."
+                        )
+                        await self.close()
+
+                    if self.session:
+                        logger.info(
+                            "🔄 Обнаружена существующая HTTP-сессия, закрываем..."
+                        )
+                        await self.session.close()
+                        self.session = None
+
+                    async with aiohttp.ClientSession() as session:
+                        self.session = session
+                        logger.info(f"🔄 Подключение к станции: {self.uri}")
+                        self.websocket = await session.ws_connect(
+                            self.uri,
+                            ssl=ssl_context,
+                            timeout=aiohttp.ClientWSTimeout(ws_close=10),
+                        )
+                        logger.info(
+                            "✅ Подключение к WebSocket станции установлено"
+                        )
+
+                        await self._cancel_tasks()
+                        stream_status_task = asyncio.create_task(
+                            self.stream_station_messages()
+                        )
+                        command_producer_task = asyncio.create_task(
+                            self.command_producer_handler()
+                        )
+                        keep_alive_ws_task = asyncio.create_task(
+                            self.keep_alive_ws_connection()
+                        )
+
+                        self.tasks = [
+                            stream_status_task,
+                            command_producer_task,
+                            keep_alive_ws_task,
+                        ]
+
+                        auth_success = await self.authenticate()
+                        if not auth_success:
+                            logger.warning(
+                                "❌ Ошибка авторизации! Требуется новый токен."
                             )
+                            await self.refresh_token()
+                            continue  # Попробуем снова
 
-            except aiohttp.ClientError as e:
-                logger.error(f"❌ WebSocket ошибка: {e}")
+                        results = await asyncio.gather(
+                            *self.tasks, return_exceptions=True
+                        )
+                        for i, result in enumerate(results):
+                            if isinstance(result, Exception):
+                                logger.error(
+                                    f"Задача {i} завершилась с ошибкой: {result}"
+                                )
 
-            finally:
-                await self._cancel_tasks()
+                except aiohttp.ClientError as e:
+                    logger.error(f"❌ WebSocket ошибка: {e}")
 
-                if not self.running and not self.reconnect_required:
-                    logger.info(
-                        "🛑 WebSocket-клиент завершает работу — "
-                        "переподключение не требуется"
-                    )
-                    break
+                finally:
+                    await self._cancel_tasks()
 
-                logger.info("🔄 Переподключение через 5 секунд...")
-                await asyncio.sleep(5)
+                    if not self.running and not self.reconnect_required:
+                        logger.info(
+                            "🛑 WebSocket-клиент завершает работу — "
+                            "переподключение не требуется"
+                        )
+                        break
+
+                    logger.info("🔄 Переподключение через 5 секунд...")
+                    await asyncio.sleep(5)
+
+        except asyncio.CancelledError:
+            logger.info("🛑 connect() прерван через CancelledError")
+            raise
 
     async def keep_alive_ws_connection(self):
         """Поддерживает соединение с WebSocket."""
@@ -282,6 +297,16 @@ class YandexStationClient:
 
         # Отмена всех фоновых задач
         await self._cancel_tasks()
+
+        if self._connect_task:
+            self._connect_task.cancel()
+            try:
+                await self._connect_task
+            except asyncio.CancelledError:
+                logger.info("✅ connect() успешно отменён")
+            except Exception as e:
+                logger.error(f"❌ Ошибка при остановке connect(): {e}")
+            self._connect_task = None
 
         if self.websocket:
             try:

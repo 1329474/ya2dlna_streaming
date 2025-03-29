@@ -2,7 +2,7 @@ import logging
 
 import aiohttp
 
-from src.core.config.settings import settings
+from core.config.settings import settings
 
 logger = logging.getLogger(__name__)
 
