@@ -74,15 +74,20 @@ class YandexStationClient:
                             self.device_id, self.platform
                         )
 
-                    if self.websocket is not None and not self.websocket.closed:
+                    if (
+                        self.websocket is not None
+                        and not self.websocket.closed
+                    ):
                         logger.warning(
-                            "⚠️ Обнаружено старое WebSocket-соединение, закрываем."
+                            "⚠️ Обнаружено старое WebSocket-соединение, "
+                            "закрываем..."
                         )
                         await self.close()
 
                     if self.session:
                         logger.info(
-                            "🔄 Обнаружена существующая HTTP-сессия, закрываем..."
+                            "🔄 Обнаружена существующая HTTP-сессия, "
+                            "закрываем..."
                         )
                         await self.session.close()
                         self.session = None
@@ -130,7 +135,8 @@ class YandexStationClient:
                         for i, result in enumerate(results):
                             if isinstance(result, Exception):
                                 logger.error(
-                                    f"Задача {i} завершилась с ошибкой: {result}"
+                                    f"Задача {i} завершилась "
+                                    f"с ошибкой: {result}"
                                 )
 
                 except aiohttp.ClientError as e:
