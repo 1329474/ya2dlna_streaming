@@ -39,38 +39,34 @@ class StreamHandler:
     async def stop_ffmpeg(self):
         """Останавливает текущий процесс FFmpeg, если он запущен."""
         if self._ffmpeg_process:
+            proc = self._ffmpeg_process
+            self._ffmpeg_process = None  # избегаем гонки
+
             logger.info("⏹ Останавливаем текущий поток FFmpeg...")
 
             try:
-                self._ffmpeg_process.terminate()
+                proc.terminate()
                 logger.info("📤 SIGTERM отправлен FFmpeg")
 
                 try:
-                    await asyncio.wait_for(
-                        self._ffmpeg_process.wait(),
-                        timeout=5
-                    )
+                    await asyncio.wait_for(proc.wait(), timeout=5)
                     logger.info(
-                        f"✅ FFmpeg завершился, код: "
-                        f"{self._ffmpeg_process.returncode}, "
-                        f"PID: {self._ffmpeg_process.pid}"
+                        f"✅ FFmpeg завершился, код: {proc.returncode}, "
+                        f"PID: {proc.pid}"
                     )
                 except asyncio.TimeoutError:
                     logger.warning(
                         "⚠️ FFmpeg не завершился вовремя, "
                         "принудительное завершение."
                     )
-                    self._ffmpeg_process.kill()
+                    proc.kill()
                     logger.debug("💀 Отправили kill()")
 
                     try:
-                        await asyncio.wait_for(
-                            self._ffmpeg_process.wait(),
-                            timeout=5
-                        )
+                        await asyncio.wait_for(proc.wait(), timeout=5)
                         logger.info(
-                            f"✅ FFmpeg принудительно завершён, код: "
-                            f"{self._ffmpeg_process.returncode}"
+                            f"✅ FFmpeg принудительно завершён, "
+                            f"код: {proc.returncode}"
                         )
                     except asyncio.TimeoutError:
                         logger.error(
@@ -82,8 +78,6 @@ class StreamHandler:
                 logger.warning("⚠️ FFmpeg уже завершился (ProcessLookupError)")
             except Exception as e:
                 logger.exception(f"❌ Ошибка при остановке FFmpeg: {e}")
-            finally:
-                self._ffmpeg_process = None
 
     async def start_ffmpeg_stream(self, yandex_url: str):
         """Запускает потоковую передачу через FFmpeg."""
@@ -108,8 +102,13 @@ class StreamHandler:
 
         async def generate():
             try:
+                proc = self._ffmpeg_process
+                if not proc:
+                    logger.info("🛑 FFmpeg-процесс отсутствует в generate()")
+                    return
+
                 while True:
-                    chunk = await self._ffmpeg_process.stdout.read(4096)
+                    chunk = await proc.stdout.read(4096)
                     if not chunk:
                         break
                     yield chunk
