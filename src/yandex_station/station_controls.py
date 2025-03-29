@@ -15,14 +15,12 @@ class YandexStationControls:
 
     _ws_client: YandexStationClient
     _volume: float
-    _ws_task: asyncio.Task | None
 
     @inject
     def __init__(self, ws_client: YandexStationClient):
         self._ws_client = ws_client
         self._volume = 0
         self._was_muted = False
-        self._ws_task = None
 
     async def start_ws_client(self):
         """Запуск WebSocket-клиента"""
@@ -30,24 +28,12 @@ class YandexStationControls:
         await self._ws_client.run_once()
 
     async def stop_ws_client(self):
-        """Остановка WebSocket-клиента"""
-        if not self._ws_task and not self._ws_client.running:
+        if not self._ws_client.running:
             logger.info("⚠️ WebSocket-клиент уже полностью остановлен")
             return
 
         logger.info("🔄 Остановка WebSocket-клиента")
-
-        ws_task = self._ws_task
-        self._ws_task = None
         await self._ws_client.close()
-        if ws_task:
-            ws_task.cancel()
-            try:
-                await ws_task
-            except asyncio.CancelledError:
-                logger.info("✅ WebSocket-клиент успешно остановлен")
-            except Exception as e:
-                logger.error(f"❌ Ошибка при остановке WebSocket-клиента: {e}")
 
     async def send_text(self, text: str):
         """Отправка текстового сообщения"""
