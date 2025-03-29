@@ -56,6 +56,7 @@ class YandexStationClient:
 
         logger.info("🚀 Запуск WebSocket-клиента в новой задаче")
         self._connect_task = asyncio.create_task(self.connect())
+        self._check_duplicate_tasks()
 
     async def connect(self):
         """Подключение к WebSocket станции."""
@@ -333,3 +334,12 @@ class YandexStationClient:
                 logger.error(f"❌ Ошибка при закрытии HTTP-сессии: {e}")
             finally:
                 self.session = None
+
+    def _check_duplicate_tasks(self):
+        """Проверка на повторяющиеся задачи"""
+        names = [t.get_coro().__name__ for t in self.tasks if not t.done()]
+        duplicates = {n for n in names if names.count(n) > 1}
+        if duplicates:
+            logger.warning(f"⚠️ Найдены повторяющиеся задачи: {duplicates}")
+        else:
+            logger.info("✅ Нет повторяющихся задач")
