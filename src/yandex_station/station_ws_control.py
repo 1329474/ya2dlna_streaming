@@ -161,6 +161,7 @@ class YandexStationClient:
             raise
 
     async def keep_alive_ws_connection(self):
+        """Поддерживает WebSocket-соединение активным"""
         while self.running:
             try:
                 response = await self.send_command({"command": "ping"})
@@ -170,7 +171,8 @@ class YandexStationClient:
                     )
                     self.reconnect_required = True
                     self.running = False
-                    return  # не отменяем себя, просто выходим
+                    return
+
             except Exception as e:
                 logger.error(f"❌ Ошибка при отправке пинга: {e}")
             await asyncio.sleep(10)
